@@ -37,6 +37,8 @@ def build_parser():
                         help="подстрока для фильтрации пакетов")
     parser.add_argument("--load-order", default="off",
                         help="показать порядок загрузки (on/off)")
+    parser.add_argument("--plantuml", default="off",
+                        help="показать граф на языке PlantUML (on/off)")
     return parser
 
 
@@ -78,13 +80,16 @@ def validate(args):
         "test_mode": parse_flag(args.test_mode),
         "filter": check_filter(args.filter),
         "load_order": parse_flag(args.load_order),
+        "plantuml": parse_flag(args.plantuml),
     }
 
 
 def format_params(settings):
     """Отформатировать настройки строками ключ-значение."""
     lines = []
-    for key in ("package", "repo", "test_mode", "filter", "load_order"):
+    keys = ("package", "repo", "test_mode", "filter",
+            "load_order", "plantuml")
+    for key in keys:
         lines.append("%s=%s" % (key, settings[key]))
     return "\n".join(lines)
 
@@ -97,8 +102,9 @@ def make_skip(needle):
 
 
 def print_test_graph(settings):
-    """Построить и вывести граф из тестового файла (этапы 3-4)."""
+    """Построить и вывести граф из тестового файла (этапы 3-5)."""
     from depgraph.order import load_order
+    from depgraph.plantuml import describe
     graph = load_test_repo(settings["repo"])
     needle = settings["filter"]
     if needle:
@@ -119,6 +125,9 @@ def print_test_graph(settings):
         for name in load_order(settings["package"], graph.get,
                                skip):
             print("  " + name)
+    if settings["plantuml"]:
+        print("plantuml:")
+        print(describe(graph))
     return 0
 
 
