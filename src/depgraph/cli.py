@@ -35,6 +35,8 @@ def build_parser():
                         help="режим тестового репозитория (on/off)")
     parser.add_argument("--filter", default="",
                         help="подстрока для фильтрации пакетов")
+    parser.add_argument("--load-order", default="off",
+                        help="показать порядок загрузки (on/off)")
     return parser
 
 
@@ -75,13 +77,14 @@ def validate(args):
         "repo": check_repo(args.repo),
         "test_mode": parse_flag(args.test_mode),
         "filter": check_filter(args.filter),
+        "load_order": parse_flag(args.load_order),
     }
 
 
 def format_params(settings):
     """Отформатировать настройки строками ключ-значение."""
     lines = []
-    for key in ("package", "repo", "test_mode", "filter"):
+    for key in ("package", "repo", "test_mode", "filter", "load_order"):
         lines.append("%s=%s" % (key, settings[key]))
     return "\n".join(lines)
 
@@ -94,7 +97,8 @@ def make_skip(needle):
 
 
 def print_test_graph(settings):
-    """Построить и вывести граф из тестового файла (этап 3)."""
+    """Построить и вывести граф из тестового файла (этапы 3-4)."""
+    from depgraph.order import load_order
     graph = load_test_repo(settings["repo"])
     needle = settings["filter"]
     if needle:
@@ -110,6 +114,11 @@ def print_test_graph(settings):
         print("cycles:")
         for found in cycles:
             print("  " + " -> ".join(found))
+    if settings["load_order"]:
+        print("load order:")
+        for name in load_order(settings["package"], graph.get,
+                               skip):
+            print("  " + name)
     return 0
 
 
