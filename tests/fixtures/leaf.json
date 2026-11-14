@@ -1,0 +1,1 @@
+{"dependencyGroups": [{"targetFramework": "net8.0", "dependencies": [{"id": "DepA", "range": "1.0.0"}, {"id": "DepB", "range": "[2.0.0, )"}]}, {"targetFramework": "", "dependencies": []}]}

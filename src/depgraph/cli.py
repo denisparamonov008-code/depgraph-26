@@ -2,6 +2,8 @@
 
 import argparse
 
+from depgraph.nuget import direct_dependencies
+
 MAX_FILTER_LENGTH = 64
 
 
@@ -84,11 +86,20 @@ def format_params(settings):
 
 
 def main(argv=None):
-    """Точка входа: разобрать параметры и вывести их."""
+    """Точка входа: параметры, затем прямые зависимости (этап 2)."""
     try:
         settings = validate(parse_args(argv))
     except ConfigError as err:
         print("ошибка: %s" % err)
         return 2
     print(format_params(settings))
+    try:
+        deps = direct_dependencies(settings["package"],
+                                   settings["repo"])
+    except Exception as err:  # сеть недоступна: честно сообщаем
+        print("ошибка: %s" % err)
+        return 1
+    print("dependencies:")
+    for name in deps:
+        print("  " + name)
     return 0
