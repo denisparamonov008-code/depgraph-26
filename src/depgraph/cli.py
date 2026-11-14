@@ -1,7 +1,9 @@
 """Разбор и проверка параметров командной строки (этап 1)."""
 
 import argparse
+import os
 
+from depgraph.graph import dfs_iterative, load_test_repo
 from depgraph.nuget import direct_dependencies
 
 MAX_FILTER_LENGTH = 64
@@ -50,7 +52,6 @@ def check_package(value):
 
 def check_repo(value):
     """Проверить адрес репозитория: URL или существующий файл."""
-    import os
     text = (value or "").strip()
     if text.startswith("http://") or text.startswith("https://"):
         return text
@@ -85,14 +86,43 @@ def format_params(settings):
     return "\n".join(lines)
 
 
+def make_skip(needle):
+    """Построить проверку подстроки фильтра для имён пакетов."""
+    def skip(name):
+        return needle in name
+    return skip
+
+
+def print_test_graph(settings):
+    """Построить и вывести граф из тестового файла (этап 3)."""
+    graph = load_test_repo(settings["repo"])
+    needle = settings["filter"]
+    if needle:
+        skip = make_skip(needle)
+    else:
+        skip = None
+    order, cycles = dfs_iterative(settings["package"],
+                                  graph.get, skip)
+    print("graph order:")
+    for name in order:
+        print("  " + name)
+    if cycles:
+        print("cycles:")
+        for found in cycles:
+            print("  " + " -> ".join(found))
+    return 0
+
+
 def main(argv=None):
-    """Точка входа: параметры, затем прямые зависимости (этап 2)."""
+    """Точка входа: параметры, затем зависимости (этапы 2-3)."""
     try:
         settings = validate(parse_args(argv))
     except ConfigError as err:
         print("ошибка: %s" % err)
         return 2
     print(format_params(settings))
+    if settings["test_mode"] and os.path.isfile(settings["repo"]):
+        return print_test_graph(settings)
     try:
         deps = direct_dependencies(settings["package"],
                                    settings["repo"])
