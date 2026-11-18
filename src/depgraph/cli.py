@@ -144,7 +144,7 @@ def main(argv=None):
     try:
         deps = direct_dependencies(settings["package"],
                                    settings["repo"])
-    except Exception as err:  # сеть недоступна: честно сообщаем
+    except Exception as err:
         print("ошибка: %s" % err)
         return 1
     print("dependencies:")
