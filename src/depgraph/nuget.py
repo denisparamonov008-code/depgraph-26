@@ -27,34 +27,51 @@ def fetch_json(url, opener=None):
     return json.loads(raw.decode("utf-8"))
 
 
-def list_versions(registration):
-    """Вернуть список версий из ответа регистрации."""
-    versions = []
-    for page in registration.get("items", []):
-        entries = page.get("items", [page])
-        for entry in entries:
-            inner = entry.get("catalogEntry", entry)
-            version = inner.get("version")
+def collect_entries(entries, opener, versions, links):
+    """Собрать версии и адреса карточек, подгружая страницы."""
+    for entry in entries:
+        if "items" in entry:
+            collect_entries(entry["items"], opener, versions, links)
+        elif "catalogEntry" in entry:
+            version = entry["catalogEntry"].get("version")
             if version and version not in versions:
                 versions.append(version)
+            if version and "@id" in entry:
+                links[version] = entry["@id"]
+        elif "@id" in entry:
+            sub = fetch_json(entry["@id"], opener)
+            collect_entries(sub.get("items", []), opener,
+                            versions, links)
+        else:
+            version = entry.get("version")
+            if version and version not in versions:
+                versions.append(version)
+
+
+def list_versions(registration, opener=None):
+    """Вернуть список версий из ответа регистрации."""
+    versions = []
+    collect_entries(registration.get("items", []), opener,
+                    versions, {})
     return versions
 
 
-def leaf_url(registration, version):
+def leaf_url(registration, version, opener=None):
     """Найти адрес карточки указанной версии пакета."""
-    for page in registration.get("items", []):
-        entries = page.get("items", [page])
-        for entry in entries:
-            inner = entry.get("catalogEntry", entry)
-            if inner.get("version") == version and "@id" in entry:
-                return entry["@id"]
-    return None
+    versions = []
+    links = {}
+    collect_entries(registration.get("items", []), opener,
+                    versions, links)
+    return links.get(version)
 
 
-def leaf_dependencies(leaf):
+def leaf_dependencies(leaf, opener=None):
     """Извлечь имена прямых зависимостей из карточки версии."""
-    names = []
     groups = leaf.get("dependencyGroups", [])
+    if not groups and isinstance(leaf.get("catalogEntry"), str):
+        entry = fetch_json(leaf["catalogEntry"], opener)
+        groups = entry.get("dependencyGroups", [])
+    names = []
     for group in groups:
         for dep in group.get("dependencies", []):
             dep_id = dep.get("id")
@@ -63,15 +80,32 @@ def leaf_dependencies(leaf):
     return names
 
 
+def resolve_base(repo, opener=None):
+    """Определить базовый адрес каталога регистрации."""
+    try:
+        answer = fetch_json(repo, opener)
+    except Exception:
+        return repo.rstrip("/")
+    if isinstance(answer, dict):
+        for res in answer.get("resources", []):
+            res_type = res.get("@type", "")
+            if "RegistrationsBaseUrl" in res_type:
+                return res.get("@id", repo).rstrip("/")
+    return repo.rstrip("/")
+
+
 def direct_dependencies(package, repo_base=None, opener=None):
     """Вернуть прямые зависимости самой свежей версии пакета."""
-    base = (repo_base or REGISTRATION_BASE).rstrip("/")
+    base = resolve_base(repo_base or REGISTRATION_BASE, opener)
     index_url = "%s/%s/index.json" % (base, package.lower())
     registration = fetch_json(index_url, opener)
-    versions = list_versions(registration)
+    versions = list_versions(registration, opener)
+    stable = [v for v in versions if "-" not in v]
+    if stable:
+        versions = stable
     if not versions:
         return []
-    url = leaf_url(registration, versions[-1])
+    url = leaf_url(registration, versions[-1], opener)
     if not url:
         return []
-    return leaf_dependencies(fetch_json(url, opener))
+    return leaf_dependencies(fetch_json(url, opener), opener)
